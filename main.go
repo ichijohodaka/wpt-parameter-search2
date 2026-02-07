@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"math"
 	"math/rand"
@@ -222,6 +223,45 @@ func saveToXLSX(
 	return f.SaveAs(filename)
 }
 
+// list を TSV で保存する（order の列順で出力）
+func saveListToTSV(filename string, order []string, list []Sample) error {
+	if filename == "" {
+		return nil
+	}
+
+	fp, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer fp.Close()
+
+	w := csv.NewWriter(fp)
+	w.Comma = '\t'
+	// TSV では Excel 等を想定して CRLF にしたい場合は次も可：
+	// w.UseCRLF = true
+
+	// header: params + y
+	header := append([]string{}, order...)
+	header = append(header, "y")
+	if err := w.Write(header); err != nil {
+		return err
+	}
+
+	for _, s := range list {
+		row := make([]string, 0, len(order)+1)
+		for _, k := range order {
+			row = append(row, fmt4(s.Values[k])) // 有効数字4桁で出力
+		}
+		row = append(row, fmt4(s.Y))
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+
+	w.Flush()
+	return w.Error()
+}
+
 func main() {
 
 	cfg := DefaultConfig()
@@ -379,6 +419,23 @@ DONE:
 			fmt.Println("xlsx save error:", err)
 		} else {
 			fmt.Println("xlsx saved:", xlsxFile)
+		}
+	}
+
+	// TSV 保存（指定されているときだけ）
+	if cfg.OKTSVFile != "" {
+		if err := saveListToTSV(cfg.OKTSVFile, order, okList); err != nil {
+			fmt.Println("tsv save error (OK):", err)
+		} else {
+			fmt.Println("tsv saved (OK):", cfg.OKTSVFile)
+		}
+	}
+
+	if cfg.NGTSVFile != "" {
+		if err := saveListToTSV(cfg.NGTSVFile, order, ngList); err != nil {
+			fmt.Println("tsv save error (NG):", err)
+		} else {
+			fmt.Println("tsv saved (NG):", cfg.NGTSVFile)
 		}
 	}
 

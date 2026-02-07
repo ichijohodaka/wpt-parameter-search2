@@ -16,7 +16,10 @@ type Config struct {
 	PrintEvery int64
 	Seed       int64
 	XLSXFile   string // "" なら保存しない
-	F          func(x map[string]float64) float64
+	// 追加：TSV（"" なら保存しない）
+	OKTSVFile string
+	NGTSVFile string
+	F         func(x map[string]float64) float64
 }
 
 // ============================================================
@@ -66,6 +69,9 @@ func DefaultConfig() Config {
 	// xlsx 出力（空文字なら保存しない）
 	// "" にすると保存はせず表示だけ
 	xlsxFile := "result.xlsx"
+	// tsv 出力（"" なら保存しない）
+	okTSVFile := "ok.tsv"
+	ngTSVFile := "ng.tsv"
 
 	// 関数（例：WPT SS の PN）
 	// 自分が考えている問題に合わせて変更する。
@@ -111,6 +117,8 @@ func DefaultConfig() Config {
 		PrintEvery: printEvery,
 		Seed:       seed,
 		XLSXFile:   xlsxFile,
+		OKTSVFile:  okTSVFile,
+		NGTSVFile:  ngTSVFile,
 		F:          f,
 	}
 }
