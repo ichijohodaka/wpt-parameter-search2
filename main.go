@@ -13,16 +13,12 @@ package main
 
 import (
 	"context"
-	"encoding/csv"
 	"fmt"
 	"math"
 	"math/rand"
 	"os"
 	"os/signal"
-	"strings"
 	"sync/atomic"
-
-	"github.com/xuri/excelize/v2"
 )
 
 type Scale int
@@ -50,8 +46,6 @@ type Range struct {
 	Max float64
 }
 
-func fmt4(x float64) string { return fmt.Sprintf("%.4g", x) }
-
 func inRange(x float64, r Range) bool {
 	return r.Min <= x && x <= r.Max
 }
@@ -75,191 +69,6 @@ func sampleOne(rng *rand.Rand, p ParamSpec) (float64, error) {
 	default:
 		return 0, fmt.Errorf("param %s: unknown scale", p.Name)
 	}
-}
-
-func printSampleTable(title string, order []string, list []Sample) {
-	fmt.Println(title)
-	if len(list) == 0 {
-		fmt.Println("(none)")
-		return
-	}
-
-	// ヘッダ（No + params + y）
-	headers := append([]string{"No"}, order...)
-	headers = append(headers, "y")
-
-	// 各セルの文字列を先に作る
-	rows := make([][]string, len(list))
-	for i, s := range list {
-		row := make([]string, 0, len(headers))
-		row = append(row, fmt.Sprintf("%d", i+1))
-		for _, k := range order {
-			row = append(row, fmt4(s.Values[k]))
-		}
-		row = append(row, fmt4(s.Y))
-		rows[i] = row
-	}
-
-	// 列幅を決定（ヘッダ or 中身の最大）
-	widths := make([]int, len(headers))
-	for i, h := range headers {
-		widths[i] = len(h)
-	}
-	for _, row := range rows {
-		for j, cell := range row {
-			if len(cell) > widths[j] {
-				widths[j] = len(cell)
-			}
-		}
-	}
-
-	// 罫線
-	printLine := func() {
-		fmt.Print("+")
-		for _, w := range widths {
-			fmt.Print(strings.Repeat("-", w+2) + "+")
-		}
-		fmt.Println()
-	}
-
-	// ヘッダ行
-	printLine()
-	fmt.Print("|")
-	for i, h := range headers {
-		fmt.Printf(" %-*s |", widths[i], h)
-	}
-	fmt.Println()
-	printLine()
-
-	// データ行
-	for _, row := range rows {
-		fmt.Print("|")
-		for j, cell := range row {
-			fmt.Printf(" %*s |", widths[j], cell) // 右寄せ
-		}
-		fmt.Println()
-	}
-	printLine()
-	fmt.Println()
-}
-
-func saveToXLSX(
-	filename string,
-	order []string,
-	okList []Sample,
-	ngList []Sample,
-	total, okc, ngc int64,
-) error {
-
-	f := excelize.NewFile()
-
-	// --------------------
-	// Summary シート
-	// --------------------
-	summary := "Summary"
-	f.SetSheetName("Sheet1", summary)
-
-	f.SetCellValue(summary, "A1", "Type")
-	f.SetCellValue(summary, "B1", "Count")
-	f.SetCellValue(summary, "C1", "Ratio")
-
-	okRatio := float64(okc) / float64(total)
-	ngRatio := float64(ngc) / float64(total)
-
-	f.SetCellValue(summary, "A2", "OK")
-	f.SetCellValue(summary, "B2", okc)
-	f.SetCellValue(summary, "C2", okRatio)
-
-	f.SetCellValue(summary, "A3", "NG")
-	f.SetCellValue(summary, "B3", ngc)
-	f.SetCellValue(summary, "C3", ngRatio)
-
-	f.SetCellValue(summary, "A4", "ALL")
-	f.SetCellValue(summary, "B4", total)
-	f.SetCellValue(summary, "C4", 1.0)
-
-	// --------------------
-	// OK / NG シート
-	// --------------------
-	writeList := func(sheet string, list []Sample) {
-		f.NewSheet(sheet)
-
-		// ヘッダ
-		col := 1
-		f.SetCellValue(sheet, "A1", "No")
-		col++
-
-		for _, k := range order {
-			cell, _ := excelize.CoordinatesToCellName(col, 1)
-			f.SetCellValue(sheet, cell, k)
-			col++
-		}
-		cell, _ := excelize.CoordinatesToCellName(col, 1)
-		f.SetCellValue(sheet, cell, "y")
-
-		// データ
-		for i, s := range list {
-			row := i + 2
-			col = 1
-
-			cell, _ := excelize.CoordinatesToCellName(col, row)
-			f.SetCellValue(sheet, cell, i+1)
-			col++
-
-			for _, k := range order {
-				cell, _ := excelize.CoordinatesToCellName(col, row)
-				f.SetCellValue(sheet, cell, s.Values[k])
-				col++
-			}
-			cell, _ = excelize.CoordinatesToCellName(col, row)
-			f.SetCellValue(sheet, cell, s.Y)
-		}
-	}
-
-	writeList("OK", okList)
-	writeList("NG", ngList)
-
-	// 保存
-	return f.SaveAs(filename)
-}
-
-// list を TSV で保存する（order の列順で出力）
-func saveListToTSV(filename string, order []string, list []Sample) error {
-	if filename == "" {
-		return nil
-	}
-
-	fp, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer fp.Close()
-
-	w := csv.NewWriter(fp)
-	w.Comma = '\t'
-	// TSV では Excel 等を想定して CRLF にしたい場合は次も可：
-	// w.UseCRLF = true
-
-	// header: params + y
-	header := append([]string{}, order...)
-	header = append(header, "y")
-	if err := w.Write(header); err != nil {
-		return err
-	}
-
-	for _, s := range list {
-		row := make([]string, 0, len(order)+1)
-		for _, k := range order {
-			row = append(row, fmt4(s.Values[k])) // 有効数字4桁で出力
-		}
-		row = append(row, fmt4(s.Y))
-		if err := w.Write(row); err != nil {
-			return err
-		}
-	}
-
-	w.Flush()
-	return w.Error()
 }
 
 func main() {
@@ -390,41 +199,22 @@ DONE:
 	okc := atomic.LoadInt64(&okHits)
 	ngc := atomic.LoadInt64(&ngHits)
 
-	var okRatio, ngRatio float64
-	if total > 0 {
-		okRatio = float64(okc) / float64(total)
-		ngRatio = float64(ngc) / float64(total)
-	}
+	PrintSummary(seed, yRange, total, okc, ngc)
 
-	fmt.Printf("\nseed=%d\n", seed)
-	fmt.Printf("yRange=[%s, %s]\n", fmt4(yRange.Min), fmt4(yRange.Max))
-	fmt.Printf("iters=%d  OK_hits=%d  NG_hits=%d\n", total, okc, ngc)
-	fmt.Printf("OK_ratio=%s  NG_ratio=%s\n\n", fmt4(okRatio), fmt4(ngRatio))
-
-	printSampleTable("=== OK (saved) ===", order, okList)
+	PrintSampleTable("=== OK (saved) ===", order, okList)
 	fmt.Println()
-	printSampleTable("=== NG (saved) ===", order, ngList)
+	PrintSampleTable("=== NG (saved) ===", order, ngList)
 
 	if xlsxFile != "" {
-		err := saveToXLSX(
-			xlsxFile,
-			order,
-			okList,
-			ngList,
-			total,
-			okc,
-			ngc,
-		)
-		if err != nil {
+		if err := SaveToXLSX(xlsxFile, order, okList, ngList, total, okc, ngc); err != nil {
 			fmt.Println("xlsx save error:", err)
 		} else {
 			fmt.Println("xlsx saved:", xlsxFile)
 		}
 	}
 
-	// TSV 保存（指定されているときだけ）
 	if cfg.OKTSVFile != "" {
-		if err := saveListToTSV(cfg.OKTSVFile, order, okList); err != nil {
+		if err := SaveListToTSV(cfg.OKTSVFile, order, okList); err != nil {
 			fmt.Println("tsv save error (OK):", err)
 		} else {
 			fmt.Println("tsv saved (OK):", cfg.OKTSVFile)
@@ -432,7 +222,7 @@ DONE:
 	}
 
 	if cfg.NGTSVFile != "" {
-		if err := saveListToTSV(cfg.NGTSVFile, order, ngList); err != nil {
+		if err := SaveListToTSV(cfg.NGTSVFile, order, ngList); err != nil {
 			fmt.Println("tsv save error (NG):", err)
 		} else {
 			fmt.Println("tsv saved (NG):", cfg.NGTSVFile)

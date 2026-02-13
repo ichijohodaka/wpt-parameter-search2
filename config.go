@@ -6,22 +6,6 @@ import (
 	"time"
 )
 
-// Config は「ユーザー設定」をまとめたもの
-type Config struct {
-	Params     []ParamSpec
-	YRange     Range
-	MaxIters   int64
-	MaxOKSave  int
-	MaxNGSave  int
-	PrintEvery int64
-	Seed       int64
-	XLSXFile   string // "" なら保存しない
-	// 追加：TSV（"" なら保存しない）
-	OKTSVFile string
-	NGTSVFile string
-	F         func(x map[string]float64) float64
-}
-
 // ============================================================
 // ユーザー設定（ここから）
 // ============================================================
@@ -46,7 +30,6 @@ func DefaultConfig() Config {
 		{Name: "C1", Min: 1e-9, Max: 100e-9, Scale: Log},   // F
 		{Name: "C2", Min: 1e-9, Max: 100e-9, Scale: Log},   // F
 	}
-
 	// 関数の値の範囲。計算結果がこの範囲に入っていれば正解，入っていなければ不正解
 	yRange := Range{Min: 0.4, Max: 1.0}
 
@@ -121,4 +104,20 @@ func DefaultConfig() Config {
 		NGTSVFile:  ngTSVFile,
 		F:          f,
 	}
+}
+
+// Config は「ユーザー設定」をまとめたもの
+type Config struct {
+	Params     []ParamSpec
+	YRange     Range
+	MaxIters   int64
+	MaxOKSave  int
+	MaxNGSave  int
+	PrintEvery int64
+	Seed       int64
+	XLSXFile   string // "" なら保存しない
+	// 追加：TSV（"" なら保存しない）
+	OKTSVFile string
+	NGTSVFile string
+	F         func(x map[string]float64) float64
 }
