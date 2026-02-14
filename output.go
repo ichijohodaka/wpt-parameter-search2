@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/csv"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -12,34 +13,17 @@ import (
 
 func fmt4(x float64) string { return fmt.Sprintf("%10.4g", x) }
 
-// 表示用：パラメータ名に応じて単位変換してから固定幅で文字列化する
-func fmtParam(name string, x float64) string {
-	switch name {
-	case "f":
-		return fmt4(x / 1e3) // Hz -> kHz
-	case "L1", "L2":
-		return fmt4(x * 1e6) // H -> µH
-	case "C1", "C2":
-		return fmt4(x * 1e9) // F -> nF
-	default:
-		return fmt4(x)
+func fmtCell(x float64) string {
+	if math.IsNaN(x) {
+		return "       NaN"
 	}
-}
-
-// 表のヘッダ用（単位ラベル）
-func labelFor(name string) string {
-	switch name {
-	case "f":
-		return "f [kHz]"
-	case "R1", "R2":
-		return name + " [Ω]"
-	case "L1", "L2":
-		return name + " [µH]"
-	case "C1", "C2":
-		return name + " [nF]"
-	default:
-		return name
+	if math.IsInf(x, 1) {
+		return "      +Inf"
 	}
+	if math.IsInf(x, -1) {
+		return "      -Inf"
+	}
+	return fmt4(x)
 }
 
 func PrintSummary(seed int64, yRange Range, total, okc, ngc int64) {
@@ -55,30 +39,36 @@ func PrintSummary(seed int64, yRange Range, total, okc, ngc int64) {
 	fmt.Printf("OK_ratio=%s  NG_ratio=%s\n\n", fmt4(okRatio), fmt4(ngRatio))
 }
 
-func PrintSampleTable(title string, order []string, list []Sample) {
+func PrintSampleTable(title string, params []ParamSpec, list []Sample, maxPrint int) {
+
 	fmt.Println(title)
 	if len(list) == 0 {
 		fmt.Println("(none)")
 		return
 	}
+	origLen := len(list)
+	if maxPrint > 0 && len(list) > maxPrint {
+		list = list[:maxPrint]
+	}
 
 	// ヘッダ（No + params + y）
-	headers := make([]string, 0, len(order)+2)
+	headers := make([]string, 0, len(params)+2)
 	headers = append(headers, "No")
-	for _, k := range order {
-		headers = append(headers, labelFor(k))
+	for _, p := range params {
+		headers = append(headers, p.Label)
 	}
 	headers = append(headers, "y")
 
-	// 各セルの文字列を先に作る
+	// 各セルの文字列を先に作る（表示用の単位変換は DisplayScale で行う）
 	rows := make([][]string, len(list))
 	for i, s := range list {
 		row := make([]string, 0, len(headers))
 		row = append(row, fmt.Sprintf("%d", i+1))
-		for _, k := range order {
-			row = append(row, fmtParam(k, s.Values[k]))
+		for _, p := range params {
+			v := s.Values[p.Key] * p.DisplayScale
+			row = append(row, fmtCell(v))
 		}
-		row = append(row, fmt4(s.Y))
+		row = append(row, fmtCell(s.Y))
 		rows[i] = row
 	}
 
@@ -138,11 +128,16 @@ func PrintSampleTable(title string, order []string, list []Sample) {
 	}
 	printLine()
 	fmt.Println()
+
+	if maxPrint > 0 && origLen > maxPrint {
+		fmt.Printf("(printed %d of %d; truncated for console)\n\n", maxPrint, origLen)
+	}
+
 }
 
 func SaveToXLSX(
 	filename string,
-	order []string,
+	params []ParamSpec,
 	okList []Sample,
 	ngList []Sample,
 	total, okc, ngc int64,
@@ -158,8 +153,12 @@ func SaveToXLSX(
 	f.SetCellValue(summary, "B1", "Count")
 	f.SetCellValue(summary, "C1", "Ratio")
 
-	okRatio := float64(okc) / float64(total)
-	ngRatio := float64(ngc) / float64(total)
+	okRatio := 0.0
+	ngRatio := 0.0
+	if total > 0 {
+		okRatio = float64(okc) / float64(total)
+		ngRatio = float64(ngc) / float64(total)
+	}
 
 	f.SetCellValue(summary, "A2", "OK")
 	f.SetCellValue(summary, "B2", okc)
@@ -181,9 +180,10 @@ func SaveToXLSX(
 		f.SetCellValue(sheet, "A1", "No")
 		col++
 
-		for _, k := range order {
+		// xlsx は「元単位で保存」する（見出しは Key にするのが無難）
+		for _, p := range params {
 			cell, _ := excelize.CoordinatesToCellName(col, 1)
-			f.SetCellValue(sheet, cell, k)
+			f.SetCellValue(sheet, cell, p.Key)
 			col++
 		}
 		cell, _ := excelize.CoordinatesToCellName(col, 1)
@@ -197,9 +197,9 @@ func SaveToXLSX(
 			f.SetCellValue(sheet, cell, i+1)
 			col++
 
-			for _, k := range order {
+			for _, p := range params {
 				cell, _ := excelize.CoordinatesToCellName(col, row)
-				f.SetCellValue(sheet, cell, s.Values[k]) // xlsx は元単位で保存
+				f.SetCellValue(sheet, cell, s.Values[p.Key]) // 元単位
 				col++
 			}
 			cell, _ = excelize.CoordinatesToCellName(col, row)
@@ -213,9 +213,9 @@ func SaveToXLSX(
 	return f.SaveAs(filename)
 }
 
-// list を TSV で保存する（order の列順で出力）
-// ※TSV は「触らない」方針なら、ここは呼び出し側のままでOK
-func SaveListToTSV(filename string, order []string, list []Sample) error {
+// list を TSV で保存する（params の順で出力）
+// TSV は「表示単位で保存」する（DisplayScale を適用）
+func SaveListToTSV(filename string, params []ParamSpec, list []Sample) error {
 	if filename == "" {
 		return nil
 	}
@@ -229,18 +229,23 @@ func SaveListToTSV(filename string, order []string, list []Sample) error {
 	w := csv.NewWriter(fp)
 	w.Comma = '\t'
 
-	header := append([]string{}, order...)
+	// ヘッダ：Label
+	header := make([]string, 0, len(params)+1)
+	for _, p := range params {
+		header = append(header, p.Label)
+	}
 	header = append(header, "y")
 	if err := w.Write(header); err != nil {
 		return err
 	}
 
 	for _, s := range list {
-		row := make([]string, 0, len(order)+1)
-		for _, k := range order {
-			row = append(row, fmtParam(k, s.Values[k])) // ← 今の挙動維持
+		row := make([]string, 0, len(params)+1)
+		for _, p := range params {
+			v := s.Values[p.Key] * p.DisplayScale
+			row = append(row, fmt.Sprintf("%.10g", v)) // TSV は桁少し多め（解析向け）
 		}
-		row = append(row, fmt4(s.Y))
+		row = append(row, fmt.Sprintf("%.10g", s.Y))
 		if err := w.Write(row); err != nil {
 			return err
 		}
