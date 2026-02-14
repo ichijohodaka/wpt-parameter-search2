@@ -61,6 +61,12 @@ $$R_1,R_2,L_1,L_2,C_1,C_2,k,\omega$$
 
 ## コード
 
+### GOのコードを編集するときの注意
+
+- GOには非常に厳しい文法チェックがあり，pythonのようにはいかない。
+- `Visual Studio Code`エディターにGO拡張を追加しておくと，文法チェックが直ちに入り，間違いがあれば指摘される。
+- 動かない場合はコードをchatGPTに貼り付けて，状況を伝えると大抵は修正できる。
+
 ### ユーザーがコード中に記述（`config.go`）
 
 - 関数の具体的定義式とその引数
@@ -75,7 +81,7 @@ $$R_1,R_2,L_1,L_2,C_1,C_2,k,\omega$$
 - エクセルファイルに保存したい場合はファイル名を指定
 - tsv形式のファイルに保存したい場合はファイル名を指定（正解，不正解それぞれ）
 
-範囲については以下で設定する。
+引数の範囲については以下で設定する。
 ```go
 	params := []ParamSpec{
 		{Name: "k", Min: 0.01, Max: 0.02, Scale: Linear},
@@ -87,11 +93,11 @@ $$R_1,R_2,L_1,L_2,C_1,C_2,k,\omega$$
 		{Name: "C1", Min: 1e-9, Max: 100e-9, Scale: Log},   // F
 		{Name: "C2", Min: 1e-9, Max: 100e-9, Scale: Log},   // F
 	}
-    // 関数の値の範囲。計算結果がこの範囲に入っていれば正解，入っていなければ不正解
-	yRange := Range{Min: 0.4, Max: 1.0}
+	// 関数の値の範囲。計算結果がこの範囲に入っていれば正解，入っていなければ不正解
+	yRange := Range{Min: 0.3, Max: 1.0}
 
 	// 繰り返し回数（10_000_000 で数秒）
-	maxIters := int64(10_000_000)
+	maxIters := int64(1_000_000)
 
 	// 保存する正解・不正解の数（多くするとファイルサイズ増）
 	maxOKSave := 10
@@ -105,20 +111,25 @@ $$R_1,R_2,L_1,L_2,C_1,C_2,k,\omega$$
 	// 実行すると乱数発生に使用されたseedが表示されるので，そのときと同じ数字を使うと
 	// 同じ乱数が発生するので，結果も同じになる。
 	seed := time.Now().UnixNano()
+	// seed = 1771036496700922400
 
 	// xlsx 出力（空文字なら保存しない）
 	// "" にすると保存はせず表示だけ
 	xlsxFile := "result.xlsx"
+	xlsxFile = ""
+
 	// tsv 出力（"" なら保存しない）
 	okTSVFile := "ok.tsv"
+	okTSVFile = ""
 	ngTSVFile := "ng.tsv"
+	ngTSVFile = ""
 ```
 
 ### 出力（コンソール表示）（`output.go`）
 
 - 保存した正解リスト
 - 保存した不正解リスト
-- Ctrl-Cで終了した場合はその時点における保存した正解リスト，不正解リスト
+- Ctrl-Cで終了した場合はその時点における保存した正解リスト，不正解リスト（思ったより時間がかかってしまった場合や，とりあえず繰り返し回数を多くしておいてその時点までの結果を知りたいとき）
 - エクセルファイル（ファイル名を指定した場合）
 - tsv形式のファイル（ファイル名を指定した場合）
 
@@ -169,45 +180,31 @@ $$R_1,R_2,L_1,L_2,C_1,C_2,k,\omega$$
 	}
 ```
 
-### 電力が大きくなるようなパラメータの領域を視覚化
+### 電力が指定した範囲に入るようなパラメータの領域を視覚化
 
 - R1, R2, L1, L2, C1, C2は決まった値を用いる。
-- 正規化電力が0.8以上になるようなkとfの領域をみたい。
+- 正規化電力が0.1以上，0.2以下になるようなkとfの領域をみたい。
+- はじめはいろいろ試したいので，下記のようにしてファイル保存しない。
 
 ```go
 	params := []ParamSpec{
-		{Name: "k", Min: 0.1, Max: 0.8, Scale: Linear},
-		{Name: "f", Min: 10_000, Max: 100_000, Scale: Log}, // Hz
-		{Name: "R1", Min: 1.0, Max: 1.0, Scale: Log},       // Ω
-		{Name: "R2", Min: 10.0, Max: 10.0, Scale: Log},     // Ω
-		{Name: "L1", Min: 140e-6, Max: 140e-6, Scale: Log}, // H
-		{Name: "L2", Min: 80e-6, Max: 80e-6, Scale: Log},   // H
-		{Name: "C1", Min: 30e-9, Max: 100e-9, Scale: Log},  // F
-		{Name: "C2", Min: 30e-9, Max: 100e-9, Scale: Log},  // F
+		{Name: "k", Min: 0.0, Max: 1.0, Scale: Linear},
+		{Name: "f", Min: 10_000, Max: 100_000, Scale: Log},   // Hz
+		{Name: "R1", Min: 1.0, Max: 1.0, Scale: Log},         // Ω
+		{Name: "R2", Min: 10.0, Max: 10.0, Scale: Log},       // Ω
+		{Name: "L1", Min: 140e-6, Max: 140e-6, Scale: Log},   // H
+		{Name: "L2", Min: 80e-6, Max: 80e-6, Scale: Log},     // H
+		{Name: "C1", Min: 90 * 1e-9, Max: 90e-9, Scale: Log}, // F
+		{Name: "C2", Min: 90 * 1e-9, Max: 90e-9, Scale: Log}, // F
 	}
+	// 関数の値の範囲。計算結果がこの範囲に入っていれば正解，入っていなければ不正解
+	yRange := Range{Min: 0.1, Max: 0.2}
 
-    yRange := Range{Min: 0.8, Max: 1.0}
-```
-
-この条件で実行したところ、次の結果を得た。
-
-```bash
-iter=    10000000 (100.00%)  OK_hits=       25443  NG_hits=     9974557
-iter=    10000000 (100.00%)  OK_hits=       25443  NG_hits=     9974557
-seed=1770969066026410100
-yRange=[       0.8,          1]
-iters=10000000  OK_hits=25443  NG_hits=9974557
-OK_ratio=  0.002544  NG_ratio=    0.9975
-```
-
-OK_hitsの数がそこそこ大きいので領域をうまく表せそうである。そこでそのデータを保存する。データ数が大きくなりそうなので、むやみに保存すべきでない。ng.tsvのほうはいらないだろう。さきほどのseedを用いると同じ結果になる。OKの数もわかっているので、保存する数を一致させる。
-
-```go
 	// 繰り返し回数（10_000_000 で数秒）
-	maxIters := int64(10_000_000)
+	maxIters := int64(1_000_000)
 
 	// 保存する正解・不正解の数（多くするとファイルサイズ増）
-	maxOKSave := 25443
+	maxOKSave := 10
 	maxNGSave := 10
 
 	// 進行状況表示の更新間隔（多すぎると遅くなる）
@@ -218,24 +215,56 @@ OK_hitsの数がそこそこ大きいので領域をうまく表せそうであ�
 	// 実行すると乱数発生に使用されたseedが表示されるので，そのときと同じ数字を使うと
 	// 同じ乱数が発生するので，結果も同じになる。
 	seed := time.Now().UnixNano()
-	seed = 1770969066026410100
+	// seed = 1771034207274033700
 
 	// xlsx 出力（空文字なら保存しない）
 	// "" にすると保存はせず表示だけ
-	xlsxFile := ""
+	xlsxFile := "result.xlsx"
+	xlsxFile = ""
+
 	// tsv 出力（"" なら保存しない）
 	okTSVFile := "ok.tsv"
-	ngTSVFile := ""
+	okTSVFile = ""
+	ngTSVFile := "ng.tsv"
+	ngTSVFile = ""
 ```
 
-実行すると、3MBほどのok.tsvができた。
+この条件で実行したところ、次の結果を得た。
 
+```bash
+iter=     1000000 (100.00%)  OK_hits=       69036  NG_hits=      930964
+iter=     1000000 (100.00%)  OK_hits=       69036  NG_hits=      930964
+seed=1771036496700922400
+yRange=[       0.1,        0.2]
+iters=1000000  OK_hits=69036  NG_hits=930964
+OK_ratio=   0.06904  NG_ratio=     0.931
+```
 
+OK_hitsの数がそこそこ大きいので領域をうまく表せそうである。そこでそのデータを保存する。データ数が大きくなりそうなので、むやみに保存すべきでない。ng.tsvのほうはいらないだろう。さきほどのseedを用いると同じ結果になる。OKの数もわかっているので、保存する数を一致させる。
 
+保存した結果を視覚化してみよう。ここでは`gnuplot`を用いた例を示す。次を`regionOK.gp`のように拡張子`gp`を付けて`ok.tsv`と同じフォルダに保存し，`.\regionOK.gp`で実行すると，`scatter.png`ができる。
 
+```gnuplot
+set datafile separator "\t"
 
+set key autotitle columnhead
 
+set terminal pngcairo size 900,600 enhanced font "Arial,12"
+set output "scatter.png"
 
+set xlabel "f"
+set ylabel "k"
+
+set logscale x 10
+set format x "10^{%L}"
+set mxtics 10
+
+set grid
+
+plot "ok.tsv" using "f":"k" with points pt 7 ps 0.6 notitle
+```
+
+![scatter plot](scatter.png)
 
 
 

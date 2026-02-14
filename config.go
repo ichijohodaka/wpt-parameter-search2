@@ -31,7 +31,7 @@ func DefaultConfig() Config {
 		{Name: "C2", Min: 1e-9, Max: 100e-9, Scale: Log},   // F
 	}
 	// 関数の値の範囲。計算結果がこの範囲に入っていれば正解，入っていなければ不正解
-	yRange := Range{Min: 0.4, Max: 1.0}
+	yRange := Range{Min: 0.3, Max: 1.0}
 
 	// 繰り返し回数（10_000_000 で数秒）
 	maxIters := int64(10_000_000)
@@ -48,18 +48,23 @@ func DefaultConfig() Config {
 	// 実行すると乱数発生に使用されたseedが表示されるので，そのときと同じ数字を使うと
 	// 同じ乱数が発生するので，結果も同じになる。
 	seed := time.Now().UnixNano()
+	// seed = 1771036496700922400
 
 	// xlsx 出力（空文字なら保存しない）
 	// "" にすると保存はせず表示だけ
 	xlsxFile := "result.xlsx"
+	xlsxFile = ""
+
 	// tsv 出力（"" なら保存しない）
 	okTSVFile := "ok.tsv"
+	okTSVFile = ""
 	ngTSVFile := "ng.tsv"
+	ngTSVFile = ""
 
-	// 関数（例：WPT SS の PN）
+	// 関数（例：WPT SS の 負荷が受け取る平均電力の正規化された値PN）
 	// 自分が考えている問題に合わせて変更する。
 	// ここの変数を変えた場合は params := []ParamSpec{ の下も同時に修正する。
-	// ここの変数の"k"などと，params := []ParamSpec{ の下の "k"は一致している必要がある。
+	// ここの変数の"k"などと，params := []ParamSpec{ の下の "k"などは一致している必要がある。
 	f := func(x map[string]float64) float64 {
 		k := x["k"]
 		fHz := x["f"]
