@@ -16,14 +16,14 @@ go run .
 
 ## カスタマイズ
 
-- `config.go`の「ユーザー設定（ここから）」から「ユーザー設定（ここまで）」の間のコードを適宜書き換える。他は修正の必要はない。
-- たとえば変数L3を追加したい場合は，
+- `config.go`はデフォルトとして触らずに，`config_local.go`を書き換えて使用する。他は修正の必要はない。
+- たとえば変数L3を追加したい場合は，`cfg.Params = []ParamSpec{`の下に
 ```go
 		{Key: "L3", Label: "L3 [µH]", Min: 80e-6, Max: 80e-6, Scale: Log, DisplayScale: 1e6},
 ```
 の行を追加する。そして
 ```go
-	f := func(x map[string]float64) float64 {
+	cfg.F = func(x map[string]float64) float64 {
 ```
 の下の関数の定義式を修正するとよい。
 - ユーザーが関数を変更して使うことを想定しているので、buildせずにコードを直接修正して実行

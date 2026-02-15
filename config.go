@@ -31,11 +31,36 @@ type Config struct {
 	F          func(x map[string]float64) float64
 }
 
+var LocalOverride func(*Config)
+
 // ============================================================
 // ユーザー設定（ここから）
 // ============================================================
 
 func DefaultConfig() Config {
+
+	yRange := Range{Min: 0.1, Max: 0.5}
+
+	maxIters := int64(1_000_000)
+
+	maxOKSave := 10
+	maxNGSave := 10
+
+	maxPrint := 100
+
+	// 進行状況表示の更新間隔（多すぎると遅くなる）
+	printEvery := int64(200_000)
+
+	// 乱数 seed（実行時刻ベース）
+	seed := time.Now().UnixNano()
+
+	// xlsx 出力（空文字なら保存しない）
+	xlsxFile := "result.xlsx"
+
+	// tsv 出力（"" なら保存しない）
+	okTSVFile := "ok.tsv"
+	ngTSVFile := "ng.tsv"
+
 	// params に表示メタ（Label / DisplayScale）も持たせる。
 	// これにより output.go は params を走査するだけで列・単位変換が決まる（switch不要）。
 	params := []ParamSpec{
@@ -55,35 +80,6 @@ func DefaultConfig() Config {
 		{Key: "C1", Label: "C1 [nF]", Min: 47e-9, Max: 47e-9, Scale: Log, DisplayScale: 1e9},
 		{Key: "C2", Label: "C2 [nF]", Min: 47e-9, Max: 47e-9, Scale: Log, DisplayScale: 1e9},
 	}
-
-	// 関数の値の範囲。計算結果がこの範囲に入っていれば正解，入っていなければ不正解
-	yRange := Range{Min: 0.1, Max: 0.5}
-
-	// 繰り返し回数（10_000_000 で数秒）
-	maxIters := int64(10_000_000)
-
-	// 保存する正解・不正解の数（多くするとファイルサイズ増）
-	maxOKSave := 30110
-	maxNGSave := 10
-
-	maxPrint := 100
-
-	// 進行状況表示の更新間隔（多すぎると遅くなる）
-	printEvery := int64(200_000)
-
-	// 乱数 seed（実行時刻ベース）
-	seed := time.Now().UnixNano()
-	seed = 1771046723902691400
-
-	// xlsx 出力（空文字なら保存しない）
-	xlsxFile := "result.xlsx"
-	xlsxFile = ""
-
-	// tsv 出力（"" なら保存しない）
-	okTSVFile := "ok.tsv"
-	// okTSVFile = ""
-	ngTSVFile := "ng.tsv"
-	ngTSVFile = ""
 
 	// 関数（例：WPT SS の 正規化電力 PN）
 	// params の Key と一致している必要がある（Get を使うとミスは即発覚する）。
@@ -118,7 +114,7 @@ func DefaultConfig() Config {
 	// ユーザー設定（ここまで）
 	// ============================================================
 
-	return Config{
+	cfg := Config{
 		Params:     params,
 		YRange:     yRange,
 		MaxIters:   maxIters,
@@ -132,4 +128,10 @@ func DefaultConfig() Config {
 		MaxPrint:   maxPrint,
 		F:          f,
 	}
+
+	if LocalOverride != nil {
+		LocalOverride(&cfg)
+	}
+
+	return cfg
 }
